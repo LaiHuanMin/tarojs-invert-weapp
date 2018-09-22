@@ -10,14 +10,21 @@ var ora = require('ora');
 var sh = require('shelljs')
 var unzip = require('unzipper');
 // babel
+var babelrc = readJson(path.resolve(path.normalize(path.join(__dirname, '..', '.babelrc'))));
 var parser = require("@babel/parser");
 var core = require('@babel/core')
 var traverse = require('@babel/traverse').default;
 var generate = require('@babel/generator').default;
 var types = require('@babel/types')
 var {transform} = core;
+function readJson(file) {
+    var ctn = fs.readFileSync(file, "UTF-8");
+    return JSON.parse(ctn);
+}
+
 
 var utils = {
+
     ora(text) {
         return ora(text).start();
     },
@@ -276,27 +283,35 @@ App({
     }
   }
 })
+
+
+
+
+`
+str = `
+    var str = props => <div>sdfsdf</div>;
+    console.log(str);  
+
+
+
+class C {
+  @enumerable(false)
+  method() { }
+}
+
+function enumerable(value) {
+  return function (target, key, descriptor) {
+     descriptor.enumerable = value;
+     return descriptor;
+  }
+}
+
 `
 
-var strast = parser.parse(str);
-var result = core.transform(str,{
-    plugins: [
-        {
-            visitor: {
-                Identifier(path) {
-                    if(path.node.name === 'openIdUrl'){
-                        debugger;
-                    }
-                },
-                CallExpression(path){
-                    if(_.isEqual(_.get(path,"node.callee.name"),"App")){
-                        debugger;
-                    }
-                }
-            }
-        }
-    ]
-})
+debugger;
+// parser.parse(str, babelrc);
+debugger;
 
-console.log(result);
+var state = core.transform(str, babelrc);
+console.log(state);
 debugger;

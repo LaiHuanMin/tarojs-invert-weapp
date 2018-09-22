@@ -1,3 +1,27 @@
+var result = core.transform(str, {
+    plugins: [
+        {
+            visitor: {
+                Identifier(path) {
+                    if (path.node.name === 'openIdUrl') {
+                        debugger;
+                    }
+                },
+                CallExpression(path) {
+                    if (_.isEqual(_.get(path, "node.callee.name"), "App")) {
+                        debugger;
+                    }
+                }
+            }
+        }
+    ]
+})
+
+console.log(result);
+debugger;
+
+
+
 var generate = require('@babel/generator').default;
 var template = require('@babel/template').default;
 var t = require('@babel/types');
@@ -73,3 +97,4 @@ console.log(generate(ast).code);
 // // const colNumber = 16;
 //
 // // const result = codeFrame(rawLines, lineNumber, colNumber, { /* options */ });
+

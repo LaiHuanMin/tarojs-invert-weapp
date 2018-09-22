@@ -1,8 +1,14 @@
 {
-  "presets": ["env"],
+  "presets": ["@babel/env"],
   "plugins": [
-    "transform-decorators-legacy",
-    "transform-class-properties",
-    "transform-runtime"
+    "@babel/plugin-transform-react-jsx",
+    [
+      "@babel/plugin-proposal-decorators",
+      {
+        "decoratorsBeforeExport": true
+      }
+    ],
+    "@babel/plugin-proposal-class-properties",
+    "@babel/plugin-syntax-dynamic-import"
   ]
 }
