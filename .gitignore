@@ -1,0 +1,15 @@
+dist/
+.temp/
+.rn_temp/
+node_modules/
+tarojsinvert*/
+tarojsinvert**
+mydemo/
+mydemo**
+mydemo*
+test111/
+test111**
+test111*
+.vscode
+yarn-error.log
+.idea/
