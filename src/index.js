@@ -18,6 +18,7 @@ var core = require("@babel/core");
 var traverse = require("@babel/traverse").default;
 var generate = require("@babel/generator").default;
 var types = require("@babel/types");
+var template = require('@babel/template').default;
 var {transform} = core;
 function readJson(file) {
     var ctn = fs.readFileSync(file, "UTF-8");
@@ -209,6 +210,11 @@ async function handleWeapp({cmdmap}) {
 }
 
 var invertUtils = {
+    getAstByObject(jsonCtn) {
+        return template.ast(`
+                    a = ${JSON.stringify(jsonCtn)} 
+                `).expression.right;
+    },
     // findchildren(path, findfunc) {
     //     var getnodebody = path => _.get(path, 'node.body', []);
     //     var body = getnodebody(path);
@@ -441,7 +447,7 @@ async function copyProjectCodeIntoTargetFolder({targetWeappDestDir, targetWeappS
         sh.cp('-r', path.join(targetWeappSourceDir, x), path.join(targetWeappDestDir, 'src'))
     })
     var appwxssfilepath = path.join(targetWeappDestDir, 'src', 'app.wxss');
-    var appcssfilepath = path.join(targetWeappDestDir, 'src', 'app.css');
+    var appcssfilepath = path.join(targetWeappDestDir, 'src', 'app.less');
     sh.mv(appwxssfilepath, appcssfilepath);
     utils.ora("复制项目代码完毕").succeed();
 }
@@ -463,8 +469,8 @@ async function invertWeappPageContentByAppJsonConfig({targetWeappDestDir, target
         var targetPageWxmlPath = createTargetFunc("wxml")
         var targetPageWxssPath = createTargetFunc("wxss")
         // mv wxss to page css
-        sh.mv(targetPageWxssPath, _.replace(targetPageWxssPath, /\.wxss/, '.css'));
-        var targetPageCssPath = createTargetFunc('css');
+        sh.mv(targetPageWxssPath, _.replace(targetPageWxssPath, /\.wxss/, '.less'));
+        var targetPageCssPath = createTargetFunc('less');
 
         var astOptions = {
             plugins: babelrc.plugins
@@ -476,6 +482,7 @@ async function invertWeappPageContentByAppJsonConfig({targetWeappDestDir, target
         var jsCtn = fs.readFileSync(targetPageJsPath, "UTF-8");
         var jsAst = core.parse(jsCtn, astOptions);
         var mapClassNameList = ['Page', 'Component']
+        var exportDefaultArr = [];
         // transform to classname
         invertUtils.traverseAst(jsAst, (path) => {
             var crtClzName = _.get(path, 'node.callee.name');
@@ -490,40 +497,37 @@ async function invertWeappPageContentByAppJsonConfig({targetWeappDestDir, target
                     }
                     return propertyVal;
                 });
+                classBodyArr.push(types.classMethod("method", types.identifier("render"), [], types.blockStatement([])));
+                var jsonCtnAst = invertUtils.getAstByObject(jsonCtn);
+                classBodyArr.push(types.classProperty(types.identifier("config"), jsonCtnAst));
                 var clzBody = types.classBody(classBodyArr);
                 var newClz = types.classDeclaration(types.identifier(crtClzName), types.identifier('TaroComponent'), clzBody);
-                var importStr = `
-                import Taro, { Component as TaroComponent } from '@tarojs/taro'
-                import './${require('path').basename(targetPageWxssPath)+".css"}' 
-                `
-                var importAstCtn = core.parse(importStr, astOptions);
+
+                // debugger;
                 path.replaceWithMultiple([
-                    ...importAstCtn.program.body,
                     newClz
                 ])
+
+                var exportDefaultStr = `
+                export default ${crtClzName};
+                `
+                exportDefaultArr.push(core.parse(exportDefaultStr, astOptions))
             }
         })
+        // debugger;
+        var importStr = `
+                import Taro, { Component as TaroComponent } from '@tarojs/taro'
+                import './${_.replace(require('path').basename(targetPageWxssPath),'.wxss','')+".less"}' 
+                `
+
+        var importAstCtn = core.parse(importStr, astOptions);
+        jsAst.program.body = [
+            ...importAstCtn.program.body,
+            ...jsAst.program.body,
+            ...exportDefaultArr
+        ]
         var clzJsCtn = invertUtils.ast2str(jsAst).code;
 
-        invertUtils.traverseAst(jsAst, (path) => {
-            if (
-                isClassPropertyAndThatName(path, "config")
-                && jsonCtn
-            ) {
-                _.set(path, "node.value", jsonCtn);
-            }
-
-            // var isMapClassAndThatName = isClassAndThatName({
-            //     path,
-            //     mapClassName: crtClzName
-            // });
-            // if (isMapClassAndThatName) {
-            //     path.find(cpath => {
-            //         // console.log(cpath);
-            //     })
-            // }
-
-        })
         var jsAstCode = invertUtils.ast2str(jsAst).code;
         fs.writeFileSync(targetPageJsPath, jsAstCode);
         utils.makeOraChange(ref, `处理${pageItem}的相关代码完毕`, 'succeed')
