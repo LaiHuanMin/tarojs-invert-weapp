@@ -10,6 +10,7 @@ mydemo*
 test111/
 test111**
 test111*
+test112*
 .vscode
 yarn-error.log
 .idea/
