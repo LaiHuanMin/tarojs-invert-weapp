@@ -18,10 +18,10 @@
 - [x] 解析AppJS/Page为React Component的形式，将json配置文件赋值到类的config属性，将微信小程序的生命周期名称转换为TaroJS的名称
 - [x] 添加TaroJS Component以及相关文件的ES6 import语句，export default语句
 - [x] 读取WXML文件并添加到render方法作为JSX语句返回，将<!-- -->修改为JSX的注释形式
-- [] 将Component的组件作为React Component的形式(准备通过各个page的useComponent作为入口依次解析)
-- [] 将render的WXML文件JSX语句进行解析，变量解析，组件解析，wxs等特性的解析
-- [] 解析less的rpx内容，将微信小程序的CSS单位和相关规范，转换为TaroJS所需要的规范
-- [] 在出现wx对象的文件顶部添加相关wx的import语句，期望不更改wx对象的调用，而是使用import的形式进行实现
+- [ ] 将Component的组件作为React Component的形式(准备通过各个page的useComponent作为入口依次解析)
+- [ ] 将render的WXML文件JSX语句进行解析，变量解析，组件解析，wxs等特性的解析
+- [ ] 解析less的rpx内容，将微信小程序的CSS单位和相关规范，转换为TaroJS所需要的规范
+- [ ] 在出现wx对象的文件顶部添加相关wx的import语句，期望不更改wx对象的调用，而是使用import的形式进行实现
 
 ## License
 
