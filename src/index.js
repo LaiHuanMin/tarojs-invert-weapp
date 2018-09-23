@@ -17,19 +17,40 @@ var parser = require("@babel/parser");
 var core = require("@babel/core");
 var traverse = require("@babel/traverse").default;
 var generate = require("@babel/generator").default;
-var types = require("@babel/types");
+var t = require("@babel/types");
 var template = require('@babel/template').default;
 var {transform} = core;
+
+var astOptions = {
+    plugins: babelrc.plugins
+};
+
 function readJson(file) {
     var ctn = fs.readFileSync(file, "UTF-8");
     return JSON.parse(ctn);
 }
 
-
 function isClassPropertyAndThatName(path, propertyName) {
     return invertUtils.isThatType(path, "ClassProperty") &&
         _.get(path, "node.key.name") === propertyName;
 }
+const taro_wx_page_methodname_map = {
+    onLoad: {
+        name: "componentWillMount"
+    },
+    onReady: {
+        name: "componentDidMount"
+    },
+    onUnload: {
+        name: "componentWillUnmount"
+    },
+    onShow: {
+        name: "componentDidShow"
+    },
+    onHide: {
+        name: "componentDidHide"
+    }
+};
 
 const taro_wx_methodname_map = {
     onLaunch: {
@@ -210,10 +231,16 @@ async function handleWeapp({cmdmap}) {
 }
 
 var invertUtils = {
-    getAstByObject(jsonCtn) {
-        return template.ast(`
-                    a = ${JSON.stringify(jsonCtn)} 
-                `).expression.right;
+    getAstByObject(jsonCtn, handleparse) {
+        if (!handleparse) {
+            handleparse = e => {
+                return JSON.stringify(e)
+            }
+        }
+        var parseResult = core.parse(`
+            a = ${handleparse(jsonCtn)} 
+        `, astOptions);
+        return parseResult.program.body[0].expression.right
     },
     // findchildren(path, findfunc) {
     //     var getnodebody = path => _.get(path, 'node.body', []);
@@ -301,13 +328,13 @@ async function invertWeappGlobalInfo({targetWeappDestDir, targetWeappSourceDir})
     var targetAppJsClzast = null;
     var targetAppJsFirstNotImportAst = null;
     invertUtils.traverseAst(target_appjs_ast, function(path) {
-        if (types.isProgram(path)) {
+        if (t.isProgram(path)) {
             path.traverse({
                 enter(cpath) {
                     if (targetAppJsFirstNotImportAst) {
                         return;
                     }
-                    if (!types.isImportDeclaration(cpath) && types.isProgram(cpath.parent) && !targetAppJsFirstNotImportAst) {
+                    if (!t.isImportDeclaration(cpath) && t.isProgram(cpath.parent) && !targetAppJsFirstNotImportAst) {
                         targetAppJsFirstNotImportAst = cpath;
                     }
                 }
@@ -342,8 +369,8 @@ async function invertWeappGlobalInfo({targetWeappDestDir, targetWeappSourceDir})
             taro_wx_methodname_map
         });
 
-        if (types.isProgram(path.parent) && !(
-            types.isExpressionStatement(path) && types.isCallExpression(path.node.expression) && _.get(path, 'node.expression.callee.name') === "App"
+        if (t.isProgram(path.parent) && !(
+            t.isExpressionStatement(path) && t.isCallExpression(path.node.expression) && _.get(path, 'node.expression.callee.name') === "App"
             )) {
             // not app, and other expression, so i will make this express into the top of the target ast  
             otherExpressArrWhichInSource.push(path.node)
@@ -360,13 +387,13 @@ async function invertWeappGlobalInfo({targetWeappDestDir, targetWeappSourceDir})
 }
 
 function isClassAndThatName({path, mapClassName}) {
-    return types.isClassDeclaration(path) && invertUtils.isthatname(path, mapClassName);
+    return t.isClassDeclaration(path) && invertUtils.isthatname(path, mapClassName);
 }
 
 function insertEachMethodsAndPropertiesIntoMainClass({path, targetAppJsClzast, taro_wx_methodname_map, mainClassName="App"}) {
     var isSourceAppFunc = path => _.isEqual(_.get(path, "node.callee.name"), mainClassName);
     if (isSourceAppFunc(path)) {
-        if (types.isCallExpression(path)) {
+        if (t.isCallExpression(path)) {
             var sourceCreateArgs = _.get(path, "node.arguments.0.properties");
             if (!_.isNil(targetAppJsClzast)) {
                 var mapNameToCtnFunc = x => {
@@ -472,9 +499,7 @@ async function invertWeappPageContentByAppJsonConfig({targetWeappDestDir, target
         sh.mv(targetPageWxssPath, _.replace(targetPageWxssPath, /\.wxss/, '.less'));
         var targetPageCssPath = createTargetFunc('less');
 
-        var astOptions = {
-            plugins: babelrc.plugins
-        };
+
         var jsonCtn = null;
         if (fs.existsSync(targetPageJsonPath)) {
             jsonCtn = require(targetPageJsonPath);
@@ -486,22 +511,38 @@ async function invertWeappPageContentByAppJsonConfig({targetWeappDestDir, target
         // transform to classname
         invertUtils.traverseAst(jsAst, (path) => {
             var crtClzName = _.get(path, 'node.callee.name');
-            if (types.isCallExpression(path) && mapClassNameList.indexOf(crtClzName) !== -1) {
+            if (t.isCallExpression(path) && mapClassNameList.indexOf(crtClzName) !== -1) {
                 var properties = path.node.arguments[0].properties;
                 var classBodyArr = _.map(properties, (propertyVal) => {
-                    if (types.isObjectProperty(propertyVal)) {
+                    if (t.isObjectProperty(propertyVal)) {
                         propertyVal.type = "ClassProperty"
                     }
-                    if (types.isObjectMethod(propertyVal)) {
+                    if (t.isObjectMethod(propertyVal)) {
                         propertyVal.type = "ClassMethod";
+                    }
+                    var wxtaro_mapname = taro_wx_methodname_map[propertyVal.key.name];
+                    if (wxtaro_mapname) {
+                        _.set(propertyVal, "key.name", wxtaro_mapname.name);
                     }
                     return propertyVal;
                 });
-                classBodyArr.push(types.classMethod("method", types.identifier("render"), [], types.blockStatement([])));
+                var wxmlCtn = fs.readFileSync(targetPageWxmlPath, "UTF-8");
+                wxmlCtn = _.replace(wxmlCtn, /[\{\}]/g, "")
+                wxmlCtn = _.replace(wxmlCtn,/<!--[\s\w\W\d\D]*?-->/g,e=>{
+                    return `{/** ${e} */}`
+                });
+                wxmlCtn = `
+                    <> 
+                        ${wxmlCtn}
+                    </>
+                `
+                classBodyArr.push(t.classMethod("method", t.identifier("render"), [], t.blockStatement([
+                    t.returnStatement(invertUtils.getAstByObject(wxmlCtn, e => e))
+                ])));
                 var jsonCtnAst = invertUtils.getAstByObject(jsonCtn);
-                classBodyArr.push(types.classProperty(types.identifier("config"), jsonCtnAst));
-                var clzBody = types.classBody(classBodyArr);
-                var newClz = types.classDeclaration(types.identifier(crtClzName), types.identifier('TaroComponent'), clzBody);
+                classBodyArr.push(t.classProperty(t.identifier("config"), jsonCtnAst));
+                var clzBody = t.classBody(classBodyArr);
+                var newClz = t.classDeclaration(t.identifier(crtClzName), t.identifier('TaroComponent'), clzBody);
 
                 // debugger;
                 path.replaceWithMultiple([
@@ -518,7 +559,7 @@ async function invertWeappPageContentByAppJsonConfig({targetWeappDestDir, target
         var importStr = `
                 import Taro, { Component as TaroComponent } from '@tarojs/taro'
                 import './${_.replace(require('path').basename(targetPageWxssPath),'.wxss','')+".less"}' 
-                `
+        `
 
         var importAstCtn = core.parse(importStr, astOptions);
         jsAst.program.body = [
